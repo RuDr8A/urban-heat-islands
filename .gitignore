@@ -44,8 +44,8 @@ ENV/
 # Data
 # =========================
 # Uncomment if raw/processed datasets should not be committed:
-# data/raw/
-# data/processed/
+data/raw/
+data/processed/
 
 # =========================
 # Node / React / Vite

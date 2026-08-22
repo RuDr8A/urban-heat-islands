@@ -1,0 +1,19 @@
+{
+    "model_type": "XGBoost Regressor",
+    "features": [
+        "NDVI",
+        "NDBI",
+        "NDWI"
+    ],
+    "target": "LST",
+    "training_years": [
+        2022,
+        2023,
+        2024,
+        2025
+    ],
+    "test_year": 2026,
+    "mae": 1.9836834617828507,
+    "rmse": 2.446148870944625,
+    "r2": 0.356435486645585
+}
