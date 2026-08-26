@@ -1,0 +1,17 @@
+{
+    "features": [
+        "NDVI",
+        "NDBI",
+        "NDWI",
+        "latitude",
+        "longitude",
+        "Year"
+    ],
+    "training_years": [
+        2022,
+        2023,
+        2024,
+        2025
+    ],
+    "test_year": 2026
+}
