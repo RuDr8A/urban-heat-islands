@@ -9,12 +9,12 @@ export default function MainLayout({ children }) {
       <div className="fixed inset-0 z-0">
         <img 
           alt="Aerial city view" 
-          className="w-full h-full object-cover opacity-55" 
+          className="w-full h-full object-cover opacity-100" 
           src={cityPhoto}
         />
         {/* Gradients */}
         <div className="absolute inset-0 bg-black/40"></div>
-        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent"></div>
+        <div className="absolute inset-0 bg-gradient-to-t from-black/10 via-black/30 to-transparent"></div>
       </div>
 
       {/* 2. FOREGROUND CONTENT LAYER (z-10) */}
