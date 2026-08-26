@@ -18,7 +18,7 @@ export default function EnvironmentalChart({
 
         return (
             <p>
-                Select a location to view environmental trends.
+                Select a location to view environmental trend.
             </p>
         );
 
