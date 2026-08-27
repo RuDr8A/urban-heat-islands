@@ -1,7 +1,7 @@
-const BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const BASE_URL = import.meta.env.VITE_API_URL;
 
 export const heatApi = {
-  // Function to fetch ML prediction from your backend
+  // Method to fetch the LST prediction
   getPrediction: async (locationData) => {
     try {
       const response = await fetch(`${BASE_URL}/predict`, {
@@ -9,22 +9,23 @@ export const heatApi = {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(locationData), // Sends NDVI, NDBI, etc.
+        body: JSON.stringify(locationData),
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        throw new Error(`Server Error: ${response.status}`);
       }
 
       return await response.json();
     } catch (error) {
-      console.error("Error fetching prediction:", error);
+      console.error("API Request Failed:", error);
       throw error;
     }
   },
-
-  // Future function for the AI Chatbot
-  askAIAnalyst: async (question, context) => {
-    // We will wire this up later!
-  }
+  
+  // You can add your AI LLM endpoint here later!
+  // eslint-disable-next-line no-unused-vars
+  askAIAnalyst: async (prompt) => {
+    
+   }
 };

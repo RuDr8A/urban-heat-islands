@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 import  { useState, useEffect, useRef } from 'react';
 
 export default function Hero({ onStartAnalysis }) {
@@ -20,6 +21,7 @@ export default function Hero({ onStartAnalysis }) {
 
   useEffect(() => {
     if (searchQuery.trim().length < 3) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSuggestions([]);
       setShowDropdown(false);
       return;
