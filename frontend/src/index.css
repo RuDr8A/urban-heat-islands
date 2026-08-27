@@ -1,3 +1,35 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  body { overscroll-behavior: none; }
+}
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+.neumorphic-panel {
+  border-radius: 2rem;
+  background: var(--tw-colors-panel-inner);
+  box-shadow: 12px 12px 24px #a3a7ac, -12px -12px 24px #d3d7da;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.neumorphic-element {
+  border-radius: 1rem;
+  background: var(--tw-colors-panel-inner);
+  box-shadow: 4px 4px 8px #a3a7ac, -4px -4px 8px #d3d7da;
+}
+
+.neumorphic-element-inset {
+  border-radius: 1rem;
+  background: var(--tw-colors-panel-inner);
+  box-shadow: inset 4px 4px 8px #a3a7ac, inset -4px -4px 8px #d3d7da;
+}
+
+.neumorphic-active {
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.4);
+  box-shadow: inset 2px 2px 4px rgba(255, 255, 255, 0.8), inset -2px -2px 4px rgba(0, 0, 0, 0.05), 0 4px 8px rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
