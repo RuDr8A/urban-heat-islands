@@ -3,8 +3,10 @@ import MainLayout from '../components/layout/MainLayout';
 import Navbar from '../components/layout/Navbar';
 import Hero from '../components/sections/Hero';
 import LogoStrip from '../components/sections/LogoStrip';
+import { useNavigate } from 'react-router-dom';
 
 export default function LandingPage({ navigateToDashboard }) {
+  const navigate = useNavigate();
   return (
     <MainLayout>
       <Navbar />
