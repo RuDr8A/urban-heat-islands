@@ -1,22 +1,19 @@
-import MainLayout from '../components/layout/MainLayout';
-import Navbar from '../components/layout/Navbar';
-import Hero from '../components/sections/Hero';
-import LogoStrip from '../components/sections/LogoStrip';
-import { useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import LandingPage from './pages/LandingPage';
+import Dashboard from './pages/Dashboard';
 
-export default function LandingPage() {
-  const navigate = useNavigate();
-
+function App() {
   return (
-    <MainLayout>
-      <Navbar />
-      
-      {/* Flex container to push footer to bottom if needed */}
-      <div className="flex flex-col min-h-screen pt-20">
-        {/* Pass the new router navigation directly to your Hero button */}
-        <Hero onStartAnalysis={() => navigate('/dashboard')} />
-        <LogoStrip />
-      </div>
-    </MainLayout>
+    <Router>
+      <Routes>
+        {/* This tells React: When the URL is exactly "/", show the Landing Page */}
+        <Route path="/" element={<LandingPage />} />
+        
+        {/* This tells React: When the URL is "/dashboard", show the Dashboard */}
+        <Route path="/dashboard" element={<Dashboard />} />
+      </Routes>
+    </Router>
   );
 }
+
+export default App;
