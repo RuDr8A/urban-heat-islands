@@ -50,6 +50,12 @@ export default function Hero({ onStartAnalysis }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    
+    // Save the searched location so the dashboard can pick it up after they log in
+    if (searchQuery) {
+      localStorage.setItem('uhi_pending_search', searchQuery);
+    }
+    
     onStartAnalysis(searchQuery);
   };
 

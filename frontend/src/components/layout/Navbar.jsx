@@ -1,30 +1,50 @@
-
+import { Link } from 'react-router-dom';
+import { useAuth } from '../../hooks/useAuth';
 
 export default function Navbar() {
+  const { user } = useAuth();
+
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 md:px-margin-desktop py-6 bg-transparent">
+    <nav className="absolute top-0 left-0 right-0 z-50 px-8 py-6 flex justify-between items-center text-white">
       
-      {/* 1. LEFT SIDE - Added flex-1 and justify-start */}
-      <div className="flex-1 flex items-center justify-start">
-        <span className="font-headline-lg-mobile md:text-headline-lg text-white font-bold leading-none">
-          Urban Heat Intel
-        </span>
+      {/* Left Logo */}
+      <div className="text-2xl font-bold tracking-tight">
+        Urban Heat Intel
       </div>
 
-      {/* 2. CENTER - Perfectly centered now */}
-      <nav className="hidden md:flex items-center justify-center gap-8">
-        <a className="text-white/80 hover:text-white transition-colors leading-none" href="#">About Us</a>
-        <a className="text-white/80 hover:text-white transition-colors leading-none" href="#">Data</a>
-        <a className="text-white/80 hover:text-white transition-colors leading-none" href="#">Methodology</a>
-      </nav>
-
-      {/* 3. RIGHT SIDE - Added flex-1 and justify-end */}
-      <div className="flex-1 flex justify-end">
-        <button className="bg-white/10 backdrop-blur-md border border-white/20 text-white font-body-md px-6 py-2 rounded-lg hover:bg-white/20 transition-all duration-300 leading-none">
-          Analyze Data
-        </button>
+      {/* Center Links (Optional) */}
+      <div className="hidden md:flex gap-8 text-sm font-medium text-white/80">
+        <a href="#about" className="hover:text-white transition-colors">About Us</a>
+        <a href="#data" className="hover:text-white transition-colors">Data</a>
+        <a href="#methodology" className="hover:text-white transition-colors">Methodology</a>
       </div>
 
-    </header>
+      {/* Right Side - Dynamic Auth Buttons */}
+      <div className="flex items-center gap-4">
+        {user ? (
+          <Link 
+            to="/dashboard" 
+            className="px-6 py-2.5 bg-white/10 hover:bg-white/20 border border-white/20 rounded-full text-white font-medium transition-all shadow-lg backdrop-blur-md"
+          >
+            Go to Dashboard
+          </Link>
+        ) : (
+          <>
+            <Link 
+              to="/login" 
+              className="text-white/80 hover:text-white font-medium px-4 py-2 transition-colors"
+            >
+              Log In
+            </Link>
+            <Link 
+              to="/register" 
+              className="px-6 py-2.5 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 rounded-full text-white font-medium transition-all shadow-lg"
+            >
+              Sign Up
+            </Link>
+          </>
+        )}
+      </div>
+    </nav>
   );
 }
