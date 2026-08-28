@@ -1,95 +1,28 @@
-# =========================
 # Python
-# =========================
 __pycache__/
 *.py[cod]
-*$py.class
-*.so
-.Python
-*.egg-info/
-dist/
-build/
-.eggs/
-
-# Virtual environments
 .venv/
 venv/
-env/
-ENV/
-
-# =========================
-# Environment / Secrets
-# =========================
 .env
-.env.*
-!.env.example
 
-# =========================
-# Jupyter Notebook
-# =========================
+# Jupyter
 .ipynb_checkpoints/
 
-# =========================
-# ML / Model Artifacts
-# =========================
-# Ignore trained models if they are large/generated
-# Uncomment if you don't want to commit them:
-# *.pkl
-# *.joblib
-# *.h5
-# *.pt
-# *.pth
+# Large training datasets
+data/raw/
+data/processed/*.parquet
 
-# =========================
-# Data
-# =========================
-# Uncomment if raw/processed datasets should not be committed:
+# ML models
+ml/models/*.joblib
 
+# Generated ML outputs
+ml/outputs/
 
-# =========================
-# Node / React / Vite
-# =========================
-node_modules/
-frontend/node_modules/
-
-frontend/dist/
-frontend/.vite/
-
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-
-# =========================
-# OS / Editor
-# =========================
-.DS_Store
-Thumbs.db
-
-.vscode/
-.idea/
-
-*.swp
-*.swo
-*~
-
-# =========================
-# Logs
-# =========================
-*.log
-
-# =========================
-# Coverage / Testing
-# =========================
-.coverage
-htmlcov/
+# Python/cache
 .pytest_cache/
 .mypy_cache/
-.ruff_cache/
 
-# =========================
-# Temporary files
-# =========================
-*.tmp
-*.temp
-*.bak
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
