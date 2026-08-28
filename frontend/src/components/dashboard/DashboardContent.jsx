@@ -1,210 +1,198 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { heatApi } from '../../services/api';
 import SpatialMap from './SpatialMap';
 import HistoricalTrends from './HistoricalTrends';
 import ShapChart from './ShapChart';
 
-export default function DashboardContent() {
-  const [data, setData] = useState(null);
+const FEATURE_KEYS = ['NDVI', 'NDBI', 'NDWI', 'albedo', 'elevation', 'slope', 'landcover'];
+
+function featuresFromPoint(point) {
+  return Object.fromEntries(FEATURE_KEYS.map((key) => [key, point[key]]));
+}
+
+function findSupportedCity(requestedCity, availableCities) {
+  const normalized = requestedCity?.trim().toLowerCase();
+  if (!normalized) return null;
+  return availableCities.find((availableCity) => availableCity.toLowerCase() === normalized)
+    || availableCities.find((availableCity) => normalized.startsWith(`${availableCity.toLowerCase()},`))
+    || null;
+}
+
+export default function DashboardContent({ requestedCity, onAnalysisContextChange }) {
+  const [cities, setCities] = useState([]);
+  const [years, setYears] = useState([]);
+  const [city, setCity] = useState(null);
+  const [year, setYear] = useState(2026);
+  const [heatmap, setHeatmap] = useState([]);
+  const [risk, setRisk] = useState([]);
+  const [hotspots, setHotspots] = useState([]);
+  const [statistics, setStatistics] = useState([]);
+  const [summary, setSummary] = useState([]);
+  const [point, setPoint] = useState(null);
+  const [pointHistory, setPointHistory] = useState([]);
+  const [prediction, setPrediction] = useState(null);
+  const [explanation, setExplanation] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [analysisNote, setAnalysisNote] = useState('');
   const [activeTab, setActiveTab] = useState('map');
-  
-  // NEW: State for the selected year
-  const [selectedYear, setSelectedYear] = useState(2026);
-  const [sliderValues, setSliderValues] = useState({ ndvi: 0.135, ndbi: 0.031, ndwi: -0.162 });
-  
-  // Update this state to include the year
-  const [simulationParams, setSimulationParams] = useState({ 
-    ndvi: 0.135, ndbi: 0.031, ndwi: -0.162, year: 2026 
-  });
+  const [sliderValues, setSliderValues] = useState({ NDVI: 0, NDBI: 0, NDWI: 0 });
 
   useEffect(() => {
-    const fetchMLData = async () => {
+    heatApi.getCities()
+      .then(({ cities: availableCities, years: availableYears }) => {
+        setCities(availableCities);
+        setYears(availableYears);
+        setCity((currentCity) => currentCity || findSupportedCity(requestedCity, availableCities) || 'Raipur');
+        setYear((currentYear) => availableYears.includes(currentYear) ? currentYear : availableYears.at(-1));
+      })
+      .catch((requestError) => setError(requestError.message));
+  }, [requestedCity]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!city) return undefined;
+    async function loadCityData() {
+      setIsLoading(true);
+      setError('');
       try {
-        setIsLoading(true);
-        // Payload now dynamically grabs the year from simulationParams
-        const payload = { 
-          lat: 21.2514, 
-          lon: 81.6296, 
-          year: simulationParams.year,
-          ndvi: simulationParams.ndvi,
-          ndbi: simulationParams.ndbi,
-          ndwi: simulationParams.ndwi
-        }; 
-        
-        const result = await heatApi.getPrediction(payload);
-        setData(result);
-      } catch (error) {
-        console.error("Failed to load dashboard data", error);
-        setData({ lst: 46.49, variance: "+0.25°", risk: "MODERATE", highHeatArea: 18.7 });
+        const [heatmapData, riskData, hotspotData, statisticsData, summaryData] = await Promise.all([
+          heatApi.getPredictedHeatmap(city, year),
+          heatApi.getRisk(city, year),
+          heatApi.getHotspots(city),
+          heatApi.getStatistics(city),
+          heatApi.getCitySummary(city),
+        ]);
+        if (cancelled) return;
+        setHeatmap(heatmapData);
+        setRisk(riskData);
+        setHotspots(hotspotData);
+        setStatistics(statisticsData);
+        setSummary(summaryData);
+        const initialPoint = heatmapData[0] || null;
+        setPoint(initialPoint);
+        if (initialPoint) {
+          const initialFeatures = featuresFromPoint(initialPoint);
+          setSliderValues({ NDVI: initialFeatures.NDVI, NDBI: initialFeatures.NDBI, NDWI: initialFeatures.NDWI });
+        }
+      } catch (requestError) {
+        if (!cancelled) setError(requestError.message);
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
-    };
+    }
+    loadCityData();
+    return () => { cancelled = true; };
+  }, [city, year]);
 
-    fetchMLData();
-  }, [simulationParams]); 
+  useEffect(() => {
+    let cancelled = false;
+    if (!point) return undefined;
+    const pointFeatures = featuresFromPoint(point);
+    Promise.all([
+      heatApi.getLocationTrend(point.latitude, point.longitude, city),
+      heatApi.getPrediction(pointFeatures),
+      heatApi.getExplanation(pointFeatures),
+    ]).then(([history, predictionData, explanationData]) => {
+      if (cancelled) return;
+      setPointHistory(history);
+      setPrediction(predictionData);
+      setExplanation(explanationData);
+    }).catch((requestError) => {
+      if (!cancelled) setError(requestError.message);
+    });
+    return () => { cancelled = true; };
+  }, [point, city]);
 
+  const selectedSummary = useMemo(
+    () => summary.find((item) => item.year === year) || summary.at(-1),
+    [summary, year]
+  );
+
+  const runSimulation = async () => {
+    if (!point) return;
+    try {
+      setIsLoading(true);
+      setError('');
+      const features = { ...featuresFromPoint(point), ...sliderValues };
+      const [predictionData, explanationData] = await Promise.all([
+        heatApi.getPrediction(features),
+        heatApi.getExplanation(features),
+      ]);
+      setPrediction(predictionData);
+      setExplanation(explanationData);
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const selectPoint = (nextPoint) => {
+    setError('');
+    setAnalysisNote('');
+    setPoint(nextPoint);
+    const nextFeatures = featuresFromPoint(nextPoint);
+    setSliderValues({ NDVI: nextFeatures.NDVI, NDBI: nextFeatures.NDBI, NDWI: nextFeatures.NDWI });
+  };
+
+  const handleMapClick = async ({ latitude, longitude }) => {
+    try {
+      setError('');
+      const nearest = await heatApi.getNearestLocation(city, year, latitude, longitude);
+      selectPoint(nearest.data);
+      setAnalysisNote(`Estimate based on the nearest ML-backed cell, ${nearest.distance_km.toFixed(2)} km from the selected location.`);
+    } catch (requestError) {
+      setError(requestError.message);
+    }
+  };
+
+  const displayedPoint = point || {};
+  useEffect(() => {
+    onAnalysisContextChange({ city, location: point ? { latitude: point.latitude, longitude: point.longitude } : null });
+  }, [city, point, onAnalysisContextChange]);
   return (
     <main className="flex-1 bg-black/40 backdrop-blur-xl border border-white/10 rounded-[2rem] shadow-2xl relative z-30 flex flex-col p-8 overflow-y-auto no-scrollbar text-white">
       <div className="max-w-6xl mx-auto w-full flex flex-col h-full gap-8">
-        
         <header className="flex flex-col gap-2 mt-2">
-            <h1 className="flex items-baseline gap-3">
-                <span className="font-headline-xl text-headline-xl text-white font-bold tracking-tight">Urban Heat</span>
-                <span className="font-accent-display text-4xl text-white italic">Intelligence</span>
-            </h1>
-            <p className="font-body-md text-white/70 text-lg">Machine learning LST prediction & spatial analysis.</p>
+          <h1 className="flex items-baseline gap-3"><span className="font-headline-xl text-headline-xl text-white font-bold tracking-tight">Urban Heat</span><span className="font-accent-display text-4xl text-white italic">Intelligence</span></h1>
+          <p className="font-body-md text-white/70 text-lg">Machine learning LST prediction & spatial analysis.</p>
         </header>
-
+        {error && <p className="text-sm text-red-300 bg-red-500/10 border border-red-400/20 rounded-xl px-4 py-2">{error}</p>}
+        {analysisNote && <p className="text-sm text-cyan-100 bg-cyan-500/10 border border-cyan-400/20 rounded-xl px-4 py-2">{analysisNote}</p>}
         <div className="grid grid-cols-12 gap-10 h-full pb-5">
-          
-          {/* Left Column - Sidebar */}
-          <div className="col-span-12 md:col-span-4 flex flex-col gap-6 ml-1 ">
-            
+          <div className="col-span-12 md:col-span-4 flex flex-col gap-6 ml-1">
             <div className="bg-white/5 backdrop-blur-xl border border-white/20 rounded-3xl p-6 flex flex-col gap-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.3)]">
-              <div>
-                <h3 className="text-white/60 font-medium text-xs tracking-widest uppercase font-label-caps mb-1">Location Analysis</h3>
-                <h2 className="text-2xl font-semibold">Raipur, India</h2>
-                <p className="text-sm text-white/40 font-mono mt-1">21.2514° N, 81.6296° E</p>
-              </div>
-
-              {/* INTERACTIVE YEAR DROPDOWN */}
-              <div>
-                <h3 className="text-white/60 font-medium text-xs tracking-widest uppercase font-label-caps mb-2">Analysis Year</h3>
-                <div className="bg-white/10 border border-white/10 rounded-xl px-4 py-3 flex items-center justify-between hover:bg-white/20 transition-colors relative focus-within:ring-2 focus-within:ring-emerald-500/50">
-                  <div className="flex items-center gap-3 w-full">
-                    <span className="material-symbols-outlined text-[18px] text-emerald-400">calendar_month</span>
-                    <select 
-                      value={selectedYear}
-                      onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-                      className="bg-transparent text-white font-medium w-full outline-none appearance-none cursor-pointer"
-                    >
-                      <option value={2024} className="bg-gray-900 text-white">2024 (Baseline)</option>
-                      <option value={2026} className="bg-gray-900 text-white">2026 Prediction</option>
-                      <option value={2030} className="bg-gray-900 text-white">2030 Prediction</option>
-                      <option value={2040} className="bg-gray-900 text-white">2040 Prediction</option>
-                      <option value={2050} className="bg-gray-900 text-white">2050 Prediction</option>
-                    </select>
-                  </div>
-                  {/* Custom Chevron to replace default browser dropdown arrow */}
-                  <span className="material-symbols-outlined text-[20px] pointer-events-none absolute right-4 text-white/50">expand_more</span>
-                </div>
-              </div>
-
-              {/* INTERACTIVE ENVIRONMENTAL SLIDERS */}
+              <div><h3 className="text-white/60 font-medium text-xs tracking-widest uppercase font-label-caps mb-1">Location Analysis</h3><h2 className="text-2xl font-semibold">{city ? `${city}, India` : 'Loading city...'}</h2><p className="text-sm text-white/40 font-mono mt-1">{point ? `${point.latitude.toFixed(4)}° N, ${point.longitude.toFixed(4)}° E` : 'Loading location...'}</p></div>
+              <label className="text-white/60 font-medium text-xs tracking-widest uppercase font-label-caps">Supported City
+                <select value={city} onChange={(event) => setCity(event.target.value)} className="mt-2 w-full bg-white/10 border border-white/10 rounded-xl px-4 py-3 text-white font-medium outline-none">
+                  {cities.map((availableCity) => <option key={availableCity} value={availableCity} className="bg-gray-900">{availableCity}</option>)}
+                </select>
+              </label>
+              <label className="text-white/60 font-medium text-xs tracking-widest uppercase font-label-caps">Analysis Year
+                <select value={year} onChange={(event) => setYear(Number(event.target.value))} className="mt-2 w-full bg-white/10 border border-white/10 rounded-xl px-4 py-3 text-white font-medium outline-none">
+                  {years.map((availableYear) => <option key={availableYear} value={availableYear} className="bg-gray-900">{availableYear}</option>)}
+                </select>
+              </label>
               <div className="flex flex-col gap-5 pt-2 border-t border-white/10">
                 <h3 className="text-white/60 font-medium text-xs tracking-widest uppercase font-label-caps mb-1">Environmental Indicators</h3>
-
-                {/* NDVI Slider */}
-                <div className="flex flex-col gap-2">
-                  <div className="flex justify-between text-sm items-center">
-                    <span className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-emerald-500"></span>NDVI (Vegetation)</span>
-                    <span className="font-mono text-white/80">{sliderValues.ndvi.toFixed(3)}</span>
-                  </div>
-                  <input 
-                    type="range" min="-1" max="1" step="0.01" 
-                    value={sliderValues.ndvi} 
-                    onChange={(e) => setSliderValues({...sliderValues, ndvi: parseFloat(e.target.value)})}
-                    className="w-full h-1 bg-white/20 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                  />
-                </div>
-
-                {/* NDBI Slider */}
-                <div className="flex flex-col gap-2">
-                  <div className="flex justify-between text-sm items-center">
-                    <span className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-orange-500"></span>NDBI (Built-up)</span>
-                    <span className="font-mono text-white/80">{sliderValues.ndbi.toFixed(3)}</span>
-                  </div>
-                  <input 
-                    type="range" min="-1" max="1" step="0.01" 
-                    value={sliderValues.ndbi} 
-                    onChange={(e) => setSliderValues({...sliderValues, ndbi: parseFloat(e.target.value)})}
-                    className="w-full h-1 bg-white/20 rounded-lg appearance-none cursor-pointer accent-orange-500"
-                  />
-                </div>
-
-                {/* NDWI Slider */}
-                <div className="flex flex-col gap-2">
-                  <div className="flex justify-between text-sm items-center">
-                    <span className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-blue-500"></span>NDWI (Water)</span>
-                    <span className="font-mono text-white/80">{sliderValues.ndwi.toFixed(3)}</span>
-                  </div>
-                  <input 
-                    type="range" min="-1" max="1" step="0.01" 
-                    value={sliderValues.ndwi} 
-                    onChange={(e) => setSliderValues({...sliderValues, ndwi: parseFloat(e.target.value)})}
-                    className="w-full h-1 bg-white/20 rounded-lg appearance-none cursor-pointer accent-blue-500"
-                  />
-                </div>
-
-                {/* UPDATED BUTTON: Now pushes the selectedYear into the simulation parameters */}
-                <button 
-                  onClick={() => setSimulationParams({ ...sliderValues, year: selectedYear })}
-                  className="mt-2 w-full bg-white/10 hover:bg-white/20 border border-white/20 text-white py-2.5 rounded-xl transition-all font-medium text-sm shadow-lg active:scale-[0.98] flex items-center justify-center gap-2"
-                >
-                  <span className="material-symbols-outlined text-[18px]">science</span>
-                  Run Simulation
-                </button>
+                {[['NDVI', 'Vegetation', 'bg-emerald-500', 'accent-emerald-500'], ['NDBI', 'Built-up', 'bg-orange-500', 'accent-orange-500'], ['NDWI', 'Water', 'bg-blue-500', 'accent-blue-500']].map(([key, label, dotClass, accentClass]) => <div key={key} className="flex flex-col gap-2"><div className="flex justify-between text-sm items-center"><span className="flex items-center gap-2"><span className={`w-2 h-2 rounded-full ${dotClass}`}></span>{key} ({label})</span><span className="font-mono text-white/80">{Number(sliderValues[key] || 0).toFixed(3)}</span></div><input type="range" min="-1" max="1" step="0.01" value={sliderValues[key] || 0} onChange={(event) => setSliderValues({ ...sliderValues, [key]: Number(event.target.value) })} className={`w-full h-1 bg-white/20 rounded-lg appearance-none cursor-pointer ${accentClass}`} /></div>)}
+                <button onClick={runSimulation} disabled={!point || isLoading} className="mt-2 w-full bg-white/10 hover:bg-white/20 disabled:opacity-50 border border-white/20 text-white py-2.5 rounded-xl transition-all font-medium text-sm shadow-lg active:scale-[0.98] flex items-center justify-center gap-2"><span className="material-symbols-outlined text-[18px]">science</span>Run Simulation</button>
               </div>
             </div>
           </div>
-
-          {/* Right Column - Stats & Tabs */}
           <div className="col-span-12 md:col-span-8 flex flex-col gap-6">
-            
-            {/* Top Stat Row */}
             <div className="grid grid-cols-3 gap-6">
-              <div className="bg-white/5 backdrop-blur-xl border border-white/20 rounded-3xl p-6 flex flex-col gap-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] hover:bg-white/10 transition-colors">
-                <h3 className="text-white/60 font-medium text-xs tracking-widest uppercase font-label-caps">Predicted LST</h3>
-                <div className="flex items-end gap-1">
-                  <span className="text-4xl font-display-xl font-light text-white tracking-tighter">
-                      {isLoading ? '--.--' : data?.lst}°
-                  </span>
-                  <div className="flex items-center justify-center px-2 py-1 rounded-full bg-red-500/20 border border-red-500/30 text-red-400 mb-1 text-xs font-medium ml-2">
-                    {isLoading ? '--' : data?.variance}
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white/5 backdrop-blur-xl border border-white/20 rounded-3xl p-6 flex flex-col gap-2 shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] hover:bg-white/10 transition-colors">
-                  <h3 className="text-white/60 font-medium text-xs tracking-widest uppercase font-label-caps">Heat Risk Level</h3>
-                  <span className={`text-2xl font-display-xl mt-1 ${data?.risk === 'SEVERE' || data?.risk === 'HIGH' ? 'text-red-500' : 'text-orange-400'}`}>
-                      {isLoading ? '...' : data?.risk}
-                  </span>
-              </div>
-
-              <div className="bg-white/5 backdrop-blur-xl border border-white/20 rounded-3xl p-6 flex flex-col gap-2 shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] hover:bg-white/10 transition-colors">
-                  <h3 className="text-white/60 font-medium text-xs tracking-widest uppercase font-label-caps">High Heat Area</h3>
-                  <span className="text-2xl font-display-xl text-white mt-1">
-                      {isLoading ? '--.-' : data?.highHeatArea}%
-                  </span>
-              </div>
+              <div className="bg-white/5 backdrop-blur-xl border border-white/20 rounded-3xl p-6 flex flex-col gap-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.3)]"><h3 className="text-white/60 font-medium text-xs tracking-widest uppercase font-label-caps">Predicted LST</h3><div className="flex items-end gap-1"><span className="text-4xl font-display-xl font-light text-white tracking-tighter">{isLoading || !prediction ? '--.--' : prediction.predicted_LST.toFixed(2)}°</span><div className="flex items-center justify-center px-2 py-1 rounded-full bg-red-500/20 border border-red-500/30 text-red-400 mb-1 text-xs font-medium ml-2">{displayedPoint.prediction_error?.toFixed(2) || '--'}°</div></div></div>
+              <div className="bg-white/5 backdrop-blur-xl border border-white/20 rounded-3xl p-6 flex flex-col gap-2 shadow-[0_8px_32px_0_rgba(0,0,0,0.3)]"><h3 className="text-white/60 font-medium text-xs tracking-widest uppercase font-label-caps">Heat Risk Level</h3><span className={`text-2xl font-display-xl mt-1 ${prediction?.risk_category?.includes('HIGH') ? 'text-red-500' : 'text-orange-400'}`}>{isLoading || !prediction ? '...' : prediction.risk_category}</span></div>
+              <div className="bg-white/5 backdrop-blur-xl border border-white/20 rounded-3xl p-6 flex flex-col gap-2 shadow-[0_8px_32px_0_rgba(0,0,0,0.3)]"><h3 className="text-white/60 font-medium text-xs tracking-widest uppercase font-label-caps">High Heat Area</h3><span className="text-2xl font-display-xl text-white mt-1">{selectedSummary ? `${(selectedSummary.high_risk_fraction * 100).toFixed(1)}%` : '--.-'}</span></div>
             </div>
-
-            {/* Navigation Tabs */}
-            <div className="flex gap-8 border-b border-white/10 pb-4 relative mt-2">
-              <button onClick={() => setActiveTab('map')} className={`font-medium relative pb-1 transition-colors ${activeTab === 'map' ? 'text-white' : 'text-white/50 hover:text-white'}`}>
-                Spatial Heat Map
-                {activeTab === 'map' && <div className="absolute -bottom-[17px] left-0 right-0 h-[2px] bg-white rounded-t-full shadow-[0_-2px_8px_rgba(255,255,255,0.8)]"></div>}
-              </button>
-              <button onClick={() => setActiveTab('trends')} className={`font-medium relative pb-1 transition-colors ${activeTab === 'trends' ? 'text-white' : 'text-white/50 hover:text-white'}`}>
-                Historical Trends
-                {activeTab === 'trends' && <div className="absolute -bottom-[17px] left-0 right-0 h-[2px] bg-white rounded-t-full shadow-[0_-2px_8px_rgba(255,255,255,0.8)]"></div>}
-              </button>
-              <button onClick={() => setActiveTab('shap')} className={`font-medium relative pb-1 transition-colors ${activeTab === 'shap' ? 'text-white' : 'text-white/50 hover:text-white'}`}>
-                SHAP Contributions
-                {activeTab === 'shap' && <div className="absolute -bottom-[17px] left-0 right-0 h-[2px] bg-white rounded-t-full shadow-[0_-2px_8px_rgba(255,255,255,0.8)]"></div>}
-              </button>
-            </div>
-
-            {/* Dynamic Card Container */}
+            <div className="flex gap-8 border-b border-white/10 pb-4 relative mt-2">{[['map', 'Spatial Heat Map'], ['trends', 'Historical Trends'], ['shap', 'SHAP Contributions']].map(([key, label]) => <button key={key} onClick={() => setActiveTab(key)} className={`font-medium relative pb-1 transition-colors ${activeTab === key ? 'text-white' : 'text-white/50 hover:text-white'}`}>{label}{activeTab === key && <div className="absolute -bottom-[17px] left-0 right-0 h-[2px] bg-white rounded-t-full shadow-[0_-2px_8px_rgba(255,255,255,0.8)]"></div>}</button>)}</div>
             <div className="bg-white/5 backdrop-blur-xl border border-white/20 flex-1 rounded-3xl p-4 relative overflow-hidden min-h-[400px] shadow-[0_8px_32px_0_rgba(0,0,0,0.3)]">
-                {activeTab === 'map' && <SpatialMap />}
-                {activeTab === 'trends' && <HistoricalTrends />}
-                {activeTab === 'shap' && <ShapChart />}
+              {activeTab === 'map' && <SpatialMap city={city} heatmap={heatmap} risk={risk} hotspots={hotspots} onPointSelect={selectPoint} onMapClick={handleMapClick} />}
+              {activeTab === 'trends' && <HistoricalTrends data={statistics} pointHistory={pointHistory} />}
+              {activeTab === 'shap' && <ShapChart explanation={explanation} />}
             </div>
-
           </div>
         </div>
       </div>

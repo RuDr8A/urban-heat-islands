@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import SidebarNav from '../components/layout/SidebarNav';
 import DashboardContent from '../components/dashboard/DashboardContent';
 import GlobalMapExplorer from '../components/dashboard/GlobalMapExplorer'; // 1. Import the new component
@@ -6,7 +7,9 @@ import AiChatDrawer from '../components/dashboard/AiChatDrawer';
 import cityPhoto from '../assets/city-photo.jpeg'; 
 
 export default function Dashboard() {
+  const location = useLocation();
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [analysisContext, setAnalysisContext] = useState({ city: 'Raipur', location: null });
   
   // 2. Add state to track which page is active (defaults to 'dashboard')
   const [activeView, setActiveView] = useState('dashboard'); 
@@ -29,13 +32,13 @@ export default function Dashboard() {
       
       {/* 4. Switch between the Dashboard and the Global Map */}
       {activeView === 'dashboard' ? (
-        <DashboardContent />
+        <DashboardContent requestedCity={location.state?.requestedCity} onAnalysisContextChange={setAnalysisContext} />
       ) : (
         <GlobalMapExplorer setActiveView={setActiveView} />
       )}
       
       {/* Sliding AI Assistant */}
-      <AiChatDrawer isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
+      <AiChatDrawer isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} city={analysisContext.city} location={analysisContext.location} />
       
     </div>
   );

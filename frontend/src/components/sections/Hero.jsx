@@ -6,6 +6,7 @@ export default function Hero({ onStartAnalysis }) {
   const [suggestions, setSuggestions] = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
+  const [selectedSuggestion, setSelectedSuggestion] = useState(null);
   
   const dropdownRef = useRef(null);
 
@@ -51,12 +52,7 @@ export default function Hero({ onStartAnalysis }) {
   const handleSubmit = (e) => {
     e.preventDefault();
     
-    // Save the searched location so the dashboard can pick it up after they log in
-    if (searchQuery) {
-      localStorage.setItem('uhi_pending_search', searchQuery);
-    }
-    
-    onStartAnalysis(searchQuery);
+    onStartAnalysis(selectedSuggestion?.name || searchQuery);
   };
 
   // NEW: Prevent Enter key from submitting the form early
@@ -69,6 +65,7 @@ export default function Hero({ onStartAnalysis }) {
 
   const handleSelectSuggestion = (suggestion) => {
     setSearchQuery(suggestion.display_name);
+    setSelectedSuggestion(suggestion);
     setShowDropdown(false);
   };
 
@@ -123,7 +120,10 @@ export default function Hero({ onStartAnalysis }) {
                 type="text"
                 placeholder="Enter an address or area..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setSelectedSuggestion(null);
+                }}
                 onKeyDown={handleKeyDown} /* <--- ADDED HERE */
                 onFocus={() => suggestions.length > 0 && setShowDropdown(true)}
                 className="flex-1 bg-transparent border-none text-white placeholder-white/60 px-6 py-3 outline-none focus:ring-0 font-body-md"

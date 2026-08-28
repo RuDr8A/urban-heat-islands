@@ -1,26 +1,33 @@
 import  { useState } from 'react';
+import { heatApi } from '../../services/api';
 
-export default function AiChatDrawer({ isOpen, onClose }) {
+export default function AiChatDrawer({ isOpen, onClose, city = 'Raipur', location }) {
   const [messages, setMessages] = useState([
     { sender: 'ai', text: 'Hello! I am your Urban Heat AI Analyst. How can I help you interpret the predictive LST data today?' }
   ]);
   const [input, setInput] = useState('');
 
-  const handleSend = (e) => {
+  const [isSending, setIsSending] = useState(false);
+
+  const handleSend = async (e) => {
     e.preventDefault();
     if (!input.trim()) return;
     
-    // 1. Add User Message
     setMessages(prev => [...prev, { sender: 'user', text: input }]);
     setInput('');
-    
-    // 2. Mock AI Response 
-    setTimeout(() => {
-      setMessages(prev => [...prev, { 
-        sender: 'ai', 
-        text: 'Based on our XGBoost model, reducing NDBI (built-up concrete) by 0.15 and increasing vegetation (NDVI) can lower the core heat island temperature by approximately 1.2°C.' 
-      }]);
-    }, 1000);
+    if (!location) {
+      setMessages(prev => [...prev, { sender: 'ai', text: 'Location data is still loading. Please try again in a moment.' }]);
+      return;
+    }
+    setIsSending(true);
+    try {
+      const result = await heatApi.analyzeLocation({ question: input, city, latitude: location.latitude, longitude: location.longitude });
+      setMessages(prev => [...prev, { sender: 'ai', text: result.answer || 'The analyst did not return an answer for this location.' }]);
+    } catch (error) {
+      setMessages(prev => [...prev, { sender: 'ai', text: `AI analysis failed: ${error.message}` }]);
+    } finally {
+      setIsSending(false);
+    }
   };
 
   return (
@@ -59,8 +66,8 @@ export default function AiChatDrawer({ isOpen, onClose }) {
             placeholder="Ask about the LST data..." 
             className="w-full bg-black/40 border border-white/20 rounded-xl py-3 pl-4 pr-12 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-emerald-500/50 transition-colors shadow-inner"
           />
-          <button type="submit" className="absolute right-2 text-emerald-400 p-2 hover:bg-white/10 rounded-lg transition-colors flex items-center justify-center">
-            <span className="material-symbols-outlined text-[18px]">send</span>
+          <button type="submit" disabled={isSending} className="absolute right-2 text-emerald-400 p-2 hover:bg-white/10 disabled:opacity-50 rounded-lg transition-colors flex items-center justify-center">
+            <span className={`material-symbols-outlined text-[18px] ${isSending ? 'animate-spin' : ''}`}>{isSending ? 'sync' : 'send'}</span>
           </button>
         </form>
       </div>

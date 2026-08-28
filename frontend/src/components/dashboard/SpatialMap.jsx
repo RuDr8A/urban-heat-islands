@@ -1,68 +1,47 @@
+import { useEffect, useRef } from 'react';
+import { CircleMarker, FeatureGroup, LayersControl, MapContainer, TileLayer, Tooltip, useMap, useMapEvents } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
 
-import { MapContainer, TileLayer, CircleMarker, Tooltip, LayersControl, FeatureGroup } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css'; 
+function FitToHeatmap({ points }) {
+  const map = useMap();
+  useEffect(() => {
+    if (points.length) map.setView([points[0].latitude, points[0].longitude], 12);
+  }, [map, points]);
+  return null;
+}
 
-export default function SpatialMap() {
-  const center = [21.2514, 81.6296];
+function MapBackgroundClick({ ignoreNextMapClick, onMapClick }) {
+  useMapEvents({ click: (event) => {
+    if (ignoreNextMapClick.current) {
+      ignoreNextMapClick.current = false;
+      return;
+    }
+    onMapClick({ latitude: event.latlng.lat, longitude: event.latlng.lng });
+  } });
+  return null;
+}
 
+function riskColor(category) {
+  if (category === 'VERY HIGH' || category === 'HIGH') return '#ef4444';
+  if (category === 'MODERATE') return '#f97316';
+  return '#22c55e';
+}
+
+export default function SpatialMap({ city, heatmap, risk, hotspots, onPointSelect, onMapClick }) {
+  const ignoreNextMapClick = useRef(false);
+  const center = heatmap.length ? [heatmap[0].latitude, heatmap[0].longitude] : [21.2514, 81.6296];
   return (
     <div className="w-full h-full min-h-[400px] rounded-3xl overflow-hidden relative z-0 shadow-[0_8px_32px_0_rgba(0,0,0,0.3)]">
-      <MapContainer 
-        center={center} 
-        zoom={12} 
-        scrollWheelZoom={true} 
-        zoomControl={true}
-        className="w-full h-full absolute inset-0 bg-[#1a1a1a]" 
-      >
-        {/* Layer Control Menu (Top Right) */}
+      <MapContainer center={center} zoom={12} scrollWheelZoom zoomControl className="w-full h-full absolute inset-0 bg-[#1a1a1a]">
+        <FitToHeatmap points={heatmap} />
+        <MapBackgroundClick ignoreNextMapClick={ignoreNextMapClick} onMapClick={onMapClick} />
         <LayersControl position="topright">
-          
-          {/* BASE MAPS (Radio Buttons - Only one active at a time) */}
-          <LayersControl.BaseLayer checked name="Satellite (Hybrid)">
-            <TileLayer
-              attribution='&copy; Google Maps'
-              url="https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}"
-            />
-          </LayersControl.BaseLayer>
-
-          <LayersControl.BaseLayer name="Terrain">
-            <TileLayer
-              attribution='&copy; Google Maps'
-              url="https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}"
-            />
-          </LayersControl.BaseLayer>
-
-          <LayersControl.BaseLayer name="Standard Map">
-            <TileLayer
-              attribution='&copy; Google Maps'
-              url="https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"
-            />
-          </LayersControl.BaseLayer>
-
-          {/* OVERLAYS (Checkboxes - Can toggle multiple on/off) */}
-          <LayersControl.Overlay checked name="Heat Risk Zones">
-            <FeatureGroup>
-              {/* Simulated High Heat Zone */}
-              <CircleMarker 
-                center={center} 
-                pathOptions={{ color: '#ffffff', weight: 2, fillColor: '#ef4444', fillOpacity: 0.6 }} 
-                radius={50}
-              >
-                <Tooltip sticky className="bg-black/80 text-white border-white/20 backdrop-blur-md">
-                  <span className="font-bold">Core Urban Heat Island</span><br/>
-                  Predicted: 46.5°C
-                </Tooltip>
-              </CircleMarker>
-
-              {/* Simulated Moderate Heat Zone */}
-              <CircleMarker 
-                center={[21.2650, 81.6400]} 
-                pathOptions={{ color: '#ffffff', weight: 2, fillColor: '#f97316', fillOpacity: 0.5 }} 
-                radius={35}
-              />
-            </FeatureGroup>
-          </LayersControl.Overlay>
-
+          <LayersControl.BaseLayer checked name="Satellite (Hybrid)"><TileLayer attribution="&copy; Google Maps" url="https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}" /></LayersControl.BaseLayer>
+          <LayersControl.BaseLayer name="Terrain"><TileLayer attribution="&copy; Google Maps" url="https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}" /></LayersControl.BaseLayer>
+          <LayersControl.BaseLayer name="Standard Map"><TileLayer attribution="&copy; Google Maps" url="https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}" /></LayersControl.BaseLayer>
+          <LayersControl.Overlay checked name="Predicted Heat"><FeatureGroup>{heatmap.map((point) => <CircleMarker key={point.sample_id} center={[point.latitude, point.longitude]} radius={5} pathOptions={{ color: '#ffffff', weight: 1, fillColor: riskColor(point.predicted_LST >= 55 ? 'VERY HIGH' : point.predicted_LST >= 48 ? 'HIGH' : point.predicted_LST >= 40 ? 'MODERATE' : 'LOW'), fillOpacity: 0.65 }} eventHandlers={{ click: () => { ignoreNextMapClick.current = true; onPointSelect(point); } }}><Tooltip sticky><strong>{city}</strong><br />Predicted: {point.predicted_LST.toFixed(2)}°C<br />Observed: {point.LST.toFixed(2)}°C</Tooltip></CircleMarker>)}</FeatureGroup></LayersControl.Overlay>
+          <LayersControl.Overlay checked name="Heat Risk Zones"><FeatureGroup>{risk.map((cell, index) => <CircleMarker key={`${cell.latitude}-${cell.longitude}-${index}`} center={[cell.latitude, cell.longitude]} radius={cell.is_hotspot ? 7 : 4} pathOptions={{ color: '#ffffff', weight: 1, fillColor: riskColor(cell.risk_category), fillOpacity: 0.45 }}><Tooltip sticky><strong>{cell.risk_category}</strong><br />Risk score: {Number(cell.risk_score).toFixed(2)}</Tooltip></CircleMarker>)}</FeatureGroup></LayersControl.Overlay>
+          <LayersControl.Overlay checked name="Persistent Hotspots"><FeatureGroup>{hotspots.map((hotspot, index) => <CircleMarker key={`${hotspot.latitude}-${hotspot.longitude}-${index}`} center={[hotspot.latitude, hotspot.longitude]} radius={9} pathOptions={{ color: '#ffffff', weight: 2, fillColor: '#e11d48', fillOpacity: 0.8 }}><Tooltip sticky><strong>Persistent hotspot</strong><br />Persistence: {hotspot.persistence_category}</Tooltip></CircleMarker>)}</FeatureGroup></LayersControl.Overlay>
         </LayersControl>
       </MapContainer>
     </div>

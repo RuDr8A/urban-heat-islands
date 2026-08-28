@@ -1,5 +1,6 @@
 from pathlib import Path
 import pandas as pd
+import numpy as np
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -162,7 +163,7 @@ def get_predicted_heatmap(city: str = "Raipur", year: int = 2026):
         data["prediction_error"] = data["LST"] - data["predicted_LST"]
 
     columns = [
-        "latitude", "longitude", "year",
+        "sample_id", "latitude", "longitude", "year",
         "LST", "predicted_LST", "prediction_error",
         "NDVI", "NDBI", "NDWI", "albedo",
         "elevation", "slope", "landcover"
@@ -218,6 +219,41 @@ def get_location_trend(latitude: float, longitude: float, city: str | None = Non
     columns = [c for c in columns if c in location_data.columns]
 
     return location_data[columns].to_dict(orient="records")
+
+
+@app.get("/location/nearest")
+def get_nearest_location(city: str, year: int, latitude: float, longitude: float):
+    if city not in PUBLIC_CITIES:
+        raise HTTPException(400, f"Unknown city: {city}")
+    if year not in YEARS:
+        raise HTTPException(400, f"Invalid year: {year}")
+
+    data = predictions_df[(predictions_df["city"] == city) & (predictions_df["year"] == year)].copy()
+    if data.empty:
+        raise HTTPException(404, "No ML-backed cells are available for this city and year")
+
+    latitude_radians = np.radians(latitude)
+    longitude_radians = np.radians(longitude)
+    cell_latitudes = np.radians(data["latitude"])
+    cell_longitudes = np.radians(data["longitude"])
+    haversine = np.sin((cell_latitudes - latitude_radians) / 2) ** 2 + np.cos(latitude_radians) * np.cos(cell_latitudes) * np.sin((cell_longitudes - longitude_radians) / 2) ** 2
+    data["distance_km"] = 6371 * 2 * np.arcsin(np.sqrt(haversine))
+    point = data.loc[data["distance_km"].idxmin()]
+
+    if point["distance_km"] > 25:
+        raise HTTPException(404, "Selected location is outside the available ML-backed analysis coverage")
+
+    point_data = {
+        column: point[column]
+        for column in ["sample_id", "city", "year", "latitude", "longitude", "LST", "predicted_LST", "prediction_error", *FEATURES]
+        if column in point
+    }
+    return {
+        "requested_location": {"latitude": latitude, "longitude": longitude},
+        "matched_location": {"latitude": float(point["latitude"]), "longitude": float(point["longitude"])},
+        "distance_km": float(point["distance_km"]),
+        "data": point_data,
+    }
 
 
 @app.get("/statistics")

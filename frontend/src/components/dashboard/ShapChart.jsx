@@ -1,14 +1,6 @@
 
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
-const shapData = [
-  { feature: 'NDVI (Vegetation)', impact: 2.8 },
-  { feature: 'NDBI (Built-up)', impact: 2.1 },
-  { feature: 'Albedo', impact: 1.5 },
-  { feature: 'NDWI (Water)', impact: 0.9 },
-  { feature: 'Population', impact: 0.6 },
-];
-
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
     return (
@@ -23,7 +15,10 @@ const CustomTooltip = ({ active, payload, label }) => {
   return null;
 };
 
-export default function ShapChart() {
+export default function ShapChart({ explanation }) {
+  const shapData = Object.entries(explanation?.contributions || {})
+    .map(([feature, impact]) => ({ feature, impact }))
+    .sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact));
   return (
     <div className="w-full h-full min-h-[350px] p-2 flex flex-col">
       <h3 className="text-xl font-bold text-white mb-6">SHAP Feature Impact</h3>

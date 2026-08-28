@@ -1,14 +1,6 @@
 
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
-const historicalData = [
-  { year: '2020', temp: 35.2 },
-  { year: '2024', temp: 36.5 },
-  { year: '2026', temp: 38.1 },
-  { year: '2030', temp: 39.8 },
-  { year: '2040', temp: 41.2 },
-];
-
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
     return (
@@ -23,13 +15,18 @@ const CustomTooltip = ({ active, payload, label }) => {
   return null;
 };
 
-export default function HistoricalTrends() {
+export default function HistoricalTrends({ data, pointHistory }) {
+  const chartData = data.map((item) => ({
+    ...item,
+    temp: item.mean_LST,
+    pointTemp: pointHistory.find((point) => point.year === item.year)?.LST,
+  }));
   return (
     <div className="w-full h-full min-h-[350px] p-2 flex flex-col">
       <h3 className="text-xl font-bold text-white mb-6">Historical & Projected LST</h3>
       <div className="flex-1 w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={historicalData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+          <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
             <defs>
               <linearGradient id="colorTemp" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#10b981" stopOpacity={0.6}/>
@@ -41,6 +38,7 @@ export default function HistoricalTrends() {
             <YAxis stroke="#ffffff80" tick={{ fill: '#ffffff80', fontSize: 12 }} tickLine={false} axisLine={false} />
             <Tooltip content={<CustomTooltip />} />
             <Area type="monotone" dataKey="temp" stroke="#34d399" strokeWidth={3} fillOpacity={1} fill="url(#colorTemp)" />
+            <Area type="monotone" dataKey="pointTemp" name="Selected point" stroke="#22d3ee" strokeWidth={2} fillOpacity={0} />
           </AreaChart>
         </ResponsiveContainer>
       </div>
