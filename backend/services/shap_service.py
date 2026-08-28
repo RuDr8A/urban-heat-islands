@@ -1,56 +1,78 @@
+from pathlib import Path
 import joblib
-import shap
 import pandas as pd
+import shap
+
+BASE_DIR = Path(__file__).resolve().parents[2]
+MODEL_PATH = BASE_DIR / "ml" / "models" / "uhi_random_forest_production.joblib"
+
+_model = None
+_explainer = None
+_features = None
 
 
-model = joblib.load(
-    "model/first_prediction_model.pkl"
-)
+def _load_model():
+    global _model, _features
 
-explainer = shap.TreeExplainer(model)
+    if _model is None:
+        if not MODEL_PATH.exists():
+            raise FileNotFoundError(f"Model not found: {MODEL_PATH}")
+
+        package = joblib.load(MODEL_PATH)
+        _model = package["model"]
+        _features = package["features"]
+
+    return _model, _features
+
+
+def _get_explainer():
+    global _explainer
+
+    model, _ = _load_model()
+
+    if _explainer is None:
+        _explainer = shap.TreeExplainer(model)
+
+    return _explainer
 
 
 def explain_prediction(
-    ndvi,
-    ndbi,
-    ndwi,
-    latitude,
-    longitude
+    NDVI,
+    NDBI,
+    NDWI,
+    albedo,
+    elevation,
+    slope,
+    landcover
 ):
+    model, features = _load_model()
 
-    features = pd.DataFrame(
-        [[
-            ndvi,
-            ndbi,
-            ndwi,
-            latitude,
-            longitude
-        ]],
-        columns=[
-            "NDVI",
-            "NDBI",
-            "NDWI",
-            "latitude",
-            "longitude"
-        ]
-    )
+    values = [[
+        NDVI,
+        NDBI,
+        NDWI,
+        albedo,
+        elevation,
+        slope,
+        landcover
+    ]]
 
-    shap_values = explainer.shap_values(
-        features
-    )
+    X = pd.DataFrame(values, columns=features)
 
-    values = shap_values[0]
+    prediction = float(model.predict(X)[0])
 
-    explanation = []
+    explainer = _get_explainer()
+    shap_values = explainer.shap_values(X)
 
-    for feature, value in zip(
-        features.columns,
-        values
-    ):
+    contributions = shap_values[0]
 
-        explanation.append({
-            "feature": feature,
-            "contribution": float(value)
-        })
+    result = {
+        "predicted_LST": prediction,
+        "base_value": float(explainer.expected_value[0]),
+        "contributions": {
+            feature: float(value)
+            for feature, value in zip(features, contributions)
+        }
+    }
 
-    return explanation
+    return result
