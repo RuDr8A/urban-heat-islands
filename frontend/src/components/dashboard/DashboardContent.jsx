@@ -29,10 +29,16 @@ function findSupportedCity(requestedCity, availableCities) {
     || null;
 }
 
-export default function DashboardContent({ requestedCity, onAnalysisContextChange = () => {} }) {
+export default function DashboardContent({
+  requestedCity,
+  requestedLocation,
+  onAnalysisContextChange = () => {},
+}) {
   const [cities, setCities] = useState([]);
   const [years, setYears] = useState([]);
-  const [city, setCity] = useState(() => findSupportedCity(requestedCity, SUPPORTED_CITIES));
+  const [city, setCity] = useState(() =>
+    findSupportedCity(requestedCity, SUPPORTED_CITIES),
+  );
   const [year, setYear] = useState(2026);
   const [heatmap, setHeatmap] = useState([]);
   const [risk, setRisk] = useState([]);
@@ -45,18 +51,32 @@ export default function DashboardContent({ requestedCity, onAnalysisContextChang
   const [explanation, setExplanation] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [error, setError] = useState('');
-  const [analysisNote, setAnalysisNote] = useState('');
-  const [activeTab, setActiveTab] = useState('map');
-  const [sliderValues, setSliderValues] = useState({ NDVI: 0, NDBI: 0, NDWI: 0 });
+  const [error, setError] = useState("");
+  const [analysisNote, setAnalysisNote] = useState("");
+  const [activeTab, setActiveTab] = useState("map");
+  const [sliderValues, setSliderValues] = useState({
+    NDVI: 0,
+    NDBI: 0,
+    NDWI: 0,
+  });
 
   useEffect(() => {
-    heatApi.getCities()
+    heatApi
+      .getCities()
       .then(({ cities: availableCities, years: availableYears }) => {
         setCities(availableCities);
         setYears(availableYears);
-        setCity((currentCity) => currentCity || findSupportedCity(requestedCity, availableCities) || 'Raipur');
-        setYear((currentYear) => availableYears.includes(currentYear) ? currentYear : availableYears.at(-1));
+        setCity(
+          (currentCity) =>
+            currentCity ||
+            findSupportedCity(requestedCity, availableCities) ||
+            "Raipur",
+        );
+        setYear((currentYear) =>
+          availableYears.includes(currentYear)
+            ? currentYear
+            : availableYears.at(-1),
+        );
       })
       .catch((requestError) => setError(requestError.message));
   }, [requestedCity]);
@@ -66,9 +86,15 @@ export default function DashboardContent({ requestedCity, onAnalysisContextChang
     if (!city) return undefined;
     async function loadCityData() {
       setIsLoading(true);
-      setError('');
+      setError("");
       try {
-        const [heatmapData, riskData, hotspotData, statisticsData, summaryData] = await Promise.all([
+        const [
+          heatmapData,
+          riskData,
+          hotspotData,
+          statisticsData,
+          summaryData,
+        ] = await Promise.all([
           heatApi.getPredictedHeatmap(city, year),
           heatApi.getRisk(city, year),
           heatApi.getHotspots(city),
@@ -82,11 +108,20 @@ export default function DashboardContent({ requestedCity, onAnalysisContextChang
         setStatistics(statisticsData);
         setSummary(summaryData);
         const initialPoint = heatmapData[0] || null;
-        setPoint(initialPoint);
-        setAnalysisNote(initialPoint ? 'Exact dataset point' : '');
-        if (initialPoint) {
-          const initialFeatures = featuresFromPoint(initialPoint);
-          setSliderValues({ NDVI: initialFeatures.NDVI, NDBI: initialFeatures.NDBI, NDWI: initialFeatures.NDWI });
+
+        if (!requestedLocation) {
+          setPoint(initialPoint);
+          setAnalysisNote(initialPoint ? "Exact dataset point" : "");
+
+          if (initialPoint) {
+            const initialFeatures = featuresFromPoint(initialPoint);
+
+            setSliderValues({
+              NDVI: initialFeatures.NDVI,
+              NDBI: initialFeatures.NDBI,
+              NDWI: initialFeatures.NDWI,
+            });
+          }
         }
       } catch (requestError) {
         if (!cancelled) setError(requestError.message);
@@ -95,7 +130,9 @@ export default function DashboardContent({ requestedCity, onAnalysisContextChang
       }
     }
     loadCityData();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [city, year]);
 
   useEffect(() => {
@@ -135,7 +172,7 @@ export default function DashboardContent({ requestedCity, onAnalysisContextChang
 
   const selectedSummary = useMemo(
     () => summary.find((item) => item.year === year) || summary.at(-1),
-    [summary, year]
+    [summary, year],
   );
 
   const runSimulation = async () => {
@@ -223,9 +260,67 @@ export default function DashboardContent({ requestedCity, onAnalysisContextChang
     }
   };
 
+  useEffect(() => {
+    if (!requestedLocation?.lat || !requestedLocation?.lon || !city) {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    async function analyzeRequestedLocation() {
+      try {
+        setError("");
+        setIsAnalyzing(true);
+
+        const nearest = await heatApi.getNearestLocation(
+          city,
+          year,
+          requestedLocation.lat,
+          requestedLocation.lon,
+        );
+
+        if (cancelled) return;
+
+        if (!nearest.within_coverage || !nearest.data) {
+          setIsAnalyzing(false);
+          setError(
+            nearest.message ||
+              "Selected location is outside ML-backed analysis coverage.",
+          );
+          return;
+        }
+
+        const distanceM = Math.round(
+          nearest.distance_m ?? nearest.distance_km * 1000,
+        );
+
+        selectPoint(
+          nearest.data,
+          `Estimated from nearest ML-backed cell. Nearest cell: ${distanceM} m away.`,
+        );
+      } catch (requestError) {
+        if (!cancelled) {
+          setIsAnalyzing(false);
+          setError(requestError.message);
+        }
+      }
+    }
+
+    analyzeRequestedLocation();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [requestedLocation, city, year]);
+
   const displayedPoint = point || {};
   useEffect(() => {
-    onAnalysisContextChange({ city, location: point ? { latitude: point.latitude, longitude: point.longitude } : null });
+    onAnalysisContextChange({
+      city,
+      location: point
+        ? { latitude: point.latitude, longitude: point.longitude }
+        : null,
+    });
   }, [city, point, onAnalysisContextChange]);
   return (
     <main className="flex-1 bg-black/40 backdrop-blur-xl border border-white/10 rounded-[2rem] shadow-2xl relative z-30 flex flex-col p-8 overflow-y-auto no-scrollbar text-white">
