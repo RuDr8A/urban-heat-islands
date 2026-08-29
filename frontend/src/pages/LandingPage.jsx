@@ -13,7 +13,7 @@ export default function LandingPage() {
       
       {/* Flex container to push footer to bottom if needed */}
       <div className="flex flex-col min-h-screen pt-20">
-        <Hero onStartAnalysis={(requestedCity) => navigate('/dashboard', { state: { requestedCity } })} />
+        <Hero onStartAnalysis={(requestedCity) => navigate(`/dashboard?city=${encodeURIComponent(requestedCity || '')}`, { state: { requestedCity } })} />
         <LogoStrip />
       </div>
     </MainLayout>

@@ -52,7 +52,7 @@ export default function Hero({ onStartAnalysis }) {
   const handleSubmit = (e) => {
     e.preventDefault();
     
-    onStartAnalysis(selectedSuggestion?.name || searchQuery);
+    onStartAnalysis(selectedSuggestion?.display_name || searchQuery);
   };
 
   // NEW: Prevent Enter key from submitting the form early

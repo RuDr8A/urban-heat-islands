@@ -5,23 +5,34 @@ import HistoricalTrends from './HistoricalTrends';
 import ShapChart from './ShapChart';
 
 const FEATURE_KEYS = ['NDVI', 'NDBI', 'NDWI', 'albedo', 'elevation', 'slope', 'landcover'];
+const SUPPORTED_CITIES = [
+  'Ahmedabad', 'Bengaluru', 'Bhubaneswar', 'Chennai',
+  'Dehradun', 'Delhi', 'Guwahati', 'Hyderabad',
+  'Jaipur', 'Kolkata', 'Mumbai', 'Nagpur', 'Pune', 'Raipur',
+];
 
 function featuresFromPoint(point) {
-  return Object.fromEntries(FEATURE_KEYS.map((key) => [key, point[key]]));
+  return Object.fromEntries(FEATURE_KEYS.map((key) => [key, Number(point[key])]));
+}
+
+function hasMlFeatures(point) {
+  return FEATURE_KEYS.every((key) => Number.isFinite(Number(point?.[key])));
 }
 
 function findSupportedCity(requestedCity, availableCities) {
   const normalized = requestedCity?.trim().toLowerCase();
   if (!normalized) return null;
-  return availableCities.find((availableCity) => availableCity.toLowerCase() === normalized)
-    || availableCities.find((availableCity) => normalized.startsWith(`${availableCity.toLowerCase()},`))
+  const cities = availableCities.length ? availableCities : SUPPORTED_CITIES;
+  return cities.find((availableCity) => availableCity.toLowerCase() === normalized)
+    || cities.find((availableCity) => normalized.startsWith(`${availableCity.toLowerCase()},`))
+    || cities.find((availableCity) => normalized.split(',').map((part) => part.trim()).includes(availableCity.toLowerCase()))
     || null;
 }
 
-export default function DashboardContent({ requestedCity, onAnalysisContextChange }) {
+export default function DashboardContent({ requestedCity, onAnalysisContextChange = () => {} }) {
   const [cities, setCities] = useState([]);
   const [years, setYears] = useState([]);
-  const [city, setCity] = useState(null);
+  const [city, setCity] = useState(() => findSupportedCity(requestedCity, SUPPORTED_CITIES));
   const [year, setYear] = useState(2026);
   const [heatmap, setHeatmap] = useState([]);
   const [risk, setRisk] = useState([]);
@@ -71,6 +82,7 @@ export default function DashboardContent({ requestedCity, onAnalysisContextChang
         setSummary(summaryData);
         const initialPoint = heatmapData[0] || null;
         setPoint(initialPoint);
+        setAnalysisNote(initialPoint ? 'Exact dataset point' : '');
         if (initialPoint) {
           const initialFeatures = featuresFromPoint(initialPoint);
           setSliderValues({ NDVI: initialFeatures.NDVI, NDBI: initialFeatures.NDBI, NDWI: initialFeatures.NDWI });
@@ -87,7 +99,7 @@ export default function DashboardContent({ requestedCity, onAnalysisContextChang
 
   useEffect(() => {
     let cancelled = false;
-    if (!point) return undefined;
+    if (!point || !hasMlFeatures(point)) return undefined;
     const pointFeatures = featuresFromPoint(point);
     Promise.all([
       heatApi.getLocationTrend(point.latitude, point.longitude, city),
@@ -128,10 +140,14 @@ export default function DashboardContent({ requestedCity, onAnalysisContextChang
     }
   };
 
-  const selectPoint = (nextPoint) => {
+  const selectPoint = (nextPoint, note = 'Exact dataset point') => {
     setError('');
-    setAnalysisNote('');
+    setAnalysisNote(note);
     setPoint(nextPoint);
+    if (!hasMlFeatures(nextPoint)) {
+      setError('The selected record is missing required ML features and cannot be analyzed.');
+      return;
+    }
     const nextFeatures = featuresFromPoint(nextPoint);
     setSliderValues({ NDVI: nextFeatures.NDVI, NDBI: nextFeatures.NDBI, NDWI: nextFeatures.NDWI });
   };
@@ -140,8 +156,15 @@ export default function DashboardContent({ requestedCity, onAnalysisContextChang
     try {
       setError('');
       const nearest = await heatApi.getNearestLocation(city, year, latitude, longitude);
-      selectPoint(nearest.data);
-      setAnalysisNote(`Estimate based on the nearest ML-backed cell, ${nearest.distance_km.toFixed(2)} km from the selected location.`);
+      if (!nearest.within_coverage || !nearest.data) {
+        setError(nearest.message || 'Selected location is outside ML-backed analysis coverage.');
+        return;
+      }
+      const distanceM = Math.round(nearest.distance_m ?? nearest.distance_km * 1000);
+      selectPoint(
+        nearest.data,
+        `Estimated from nearest ML-backed cell. Nearest cell: ${distanceM} m away.`
+      );
     } catch (requestError) {
       setError(requestError.message);
     }
@@ -165,7 +188,7 @@ export default function DashboardContent({ requestedCity, onAnalysisContextChang
             <div className="bg-white/5 backdrop-blur-xl border border-white/20 rounded-3xl p-6 flex flex-col gap-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.3)]">
               <div><h3 className="text-white/60 font-medium text-xs tracking-widest uppercase font-label-caps mb-1">Location Analysis</h3><h2 className="text-2xl font-semibold">{city ? `${city}, India` : 'Loading city...'}</h2><p className="text-sm text-white/40 font-mono mt-1">{point ? `${point.latitude.toFixed(4)}° N, ${point.longitude.toFixed(4)}° E` : 'Loading location...'}</p></div>
               <label className="text-white/60 font-medium text-xs tracking-widest uppercase font-label-caps">Supported City
-                <select value={city} onChange={(event) => setCity(event.target.value)} className="mt-2 w-full bg-white/10 border border-white/10 rounded-xl px-4 py-3 text-white font-medium outline-none">
+                <select value={city || ''} onChange={(event) => setCity(event.target.value)} className="mt-2 w-full bg-white/10 border border-white/10 rounded-xl px-4 py-3 text-white font-medium outline-none">
                   {cities.map((availableCity) => <option key={availableCity} value={availableCity} className="bg-gray-900">{availableCity}</option>)}
                 </select>
               </label>

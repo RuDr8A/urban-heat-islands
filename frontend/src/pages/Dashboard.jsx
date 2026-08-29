@@ -8,6 +8,7 @@ import cityPhoto from '../assets/city-photo.jpeg';
 
 export default function Dashboard() {
   const location = useLocation();
+  const requestedCity = new URLSearchParams(location.search).get('city') || location.state?.requestedCity;
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [analysisContext, setAnalysisContext] = useState({ city: 'Raipur', location: null });
   
@@ -32,7 +33,7 @@ export default function Dashboard() {
       
       {/* 4. Switch between the Dashboard and the Global Map */}
       {activeView === 'dashboard' ? (
-        <DashboardContent requestedCity={location.state?.requestedCity} onAnalysisContextChange={setAnalysisContext} />
+        <DashboardContent requestedCity={requestedCity} onAnalysisContextChange={setAnalysisContext} />
       ) : (
         <GlobalMapExplorer setActiveView={setActiveView} />
       )}

@@ -23,6 +23,35 @@ PUBLIC_CITIES = [
     "Dehradun", "Delhi", "Guwahati", "Hyderabad",
     "Jaipur", "Kolkata", "Mumbai", "Nagpur", "Pune", "Raipur"
 ]
+# Production urban cells are ~450–600 m apart. 2 km covers local gaps without
+# matching a click to a distant neighborhood elsewhere in the city.
+MAX_NEAREST_CELL_DISTANCE_KM = 2.0
+EARTH_RADIUS_KM = 6371
+
+
+def jsonable(value):
+    if value is None:
+        return None
+    if isinstance(value, (np.integer,)):
+        return int(value)
+    if isinstance(value, (np.floating, float)):
+        number = float(value)
+        return None if np.isnan(number) else number
+    if isinstance(value, (str, int, bool)):
+        return value
+    return str(value)
+
+
+def record_from_row(row):
+    columns = [
+        "sample_id", "city", "year", "latitude", "longitude",
+        "LST", "predicted_LST", "prediction_error", *FEATURES
+    ]
+    return {
+        column: jsonable(row[column])
+        for column in columns
+        if column in row
+    }
 
 
 def load_parquet(path):
@@ -236,23 +265,37 @@ def get_nearest_location(city: str, year: int, latitude: float, longitude: float
     longitude_radians = np.radians(longitude)
     cell_latitudes = np.radians(data["latitude"])
     cell_longitudes = np.radians(data["longitude"])
-    haversine = np.sin((cell_latitudes - latitude_radians) / 2) ** 2 + np.cos(latitude_radians) * np.cos(cell_latitudes) * np.sin((cell_longitudes - longitude_radians) / 2) ** 2
-    data["distance_km"] = 6371 * 2 * np.arcsin(np.sqrt(haversine))
+    haversine = (
+        np.sin((cell_latitudes - latitude_radians) / 2) ** 2
+        + np.cos(latitude_radians) * np.cos(cell_latitudes) * np.sin((cell_longitudes - longitude_radians) / 2) ** 2
+    )
+    data["distance_km"] = EARTH_RADIUS_KM * 2 * np.arcsin(np.sqrt(haversine))
     point = data.loc[data["distance_km"].idxmin()]
+    distance_km = float(point["distance_km"])
+    distance_m = distance_km * 1000
 
-    if point["distance_km"] > 25:
-        raise HTTPException(404, "Selected location is outside the available ML-backed analysis coverage")
+    if distance_km > MAX_NEAREST_CELL_DISTANCE_KM:
+        return {
+            "within_coverage": False,
+            "requested_location": {"latitude": latitude, "longitude": longitude},
+            "matched_location": None,
+            "distance_km": distance_km,
+            "distance_m": distance_m,
+            "data": None,
+            "message": "Selected location is outside ML-backed analysis coverage. No sufficiently close dataset cell was found.",
+        }
 
-    point_data = {
-        column: point[column]
-        for column in ["sample_id", "city", "year", "latitude", "longitude", "LST", "predicted_LST", "prediction_error", *FEATURES]
-        if column in point
-    }
     return {
+        "within_coverage": True,
         "requested_location": {"latitude": latitude, "longitude": longitude},
-        "matched_location": {"latitude": float(point["latitude"]), "longitude": float(point["longitude"])},
-        "distance_km": float(point["distance_km"]),
-        "data": point_data,
+        "matched_location": {
+            "latitude": float(point["latitude"]),
+            "longitude": float(point["longitude"]),
+        },
+        "distance_km": distance_km,
+        "distance_m": distance_m,
+        "data": record_from_row(point),
+        "message": None,
     }
 
 
