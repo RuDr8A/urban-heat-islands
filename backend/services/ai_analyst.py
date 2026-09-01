@@ -699,20 +699,47 @@ No Markdown tables.
         "question": question
     })
 
-    answer = response.content
+    answer_content = response.content
+
+# Gemini/LangChain may return either a plain string
+# or a list of content blocks.
+# Convert both forms into plain text.
+
+    if isinstance(answer_content, str):
+        answer = answer_content
+
+    elif isinstance(answer_content, list):
+        parts = []
+
+        for item in answer_content:
+            if isinstance(item, str):
+                parts.append(item)
+
+            elif isinstance(item, dict):
+                text = item.get("text")
+
+                if text:
+                    parts.append(str(text))
+
+        answer = "\n".join(parts)
+
+    else:
+        answer = str(answer_content)
+
 
     # --------------------------------------------------------
     # FINAL SAFETY CLEANUP
     # --------------------------------------------------------
 
-    # Gemini should already return plain text because of the
-    # prompt above. This cleanup is an additional safeguard.
+    # Remove any Markdown formatting Gemini may have returned.
 
     answer = answer.replace("### ", "")
     answer = answer.replace("## ", "")
     answer = answer.replace("# ", "")
     answer = answer.replace("**", "")
     answer = answer.replace("__", "")
+
+    answer = answer.strip()
 
     return {
         "answer": answer.strip(),
